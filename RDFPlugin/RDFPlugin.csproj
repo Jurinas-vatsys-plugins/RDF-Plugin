@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>vatSys.RDFPlugin</AssemblyName>
+    <RootNamespace>vatSys.RDF</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Version>1.0.0</Version>
+    <Product>RDF Plugin for vatSys</Product>
+    <Description>Radio Direction Finder - highlights aircraft transmitting on received frequencies</Description>
+    <Copyright>Based on the RDF Plugin for EuroScope by Claus Hemberg Joergensen</Copyright>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Location of the vatSys installation (contains bin\vatSys.exe) -->
+    <VatSysDir Condition="'$(VatSysDir)' == ''">G:\vatSys\vatSys</VatSysDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="vatSys">
+      <HintPath>$(VatSysDir)\bin\vatSys.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VATSYSControls">
+      <HintPath>$(VatSysDir)\bin\VATSYSControls.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GeoVR.Shared">
+      <HintPath>$(VatSysDir)\bin\GeoVR.Shared.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX">
+      <HintPath>$(VatSysDir)\bin\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Direct2D1">
+      <HintPath>$(VatSysDir)\bin\SharpDX.Direct2D1.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Mathematics">
+      <HintPath>$(VatSysDir)\bin\SharpDX.Mathematics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.DXGI">
+      <HintPath>$(VatSysDir)\bin\SharpDX.DXGI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Harmony is embedded into the plugin DLL so a single file can be dropped into any Plugins folder. -->
+  <ItemGroup>
+    <PackageReference Include="Lib.Harmony" Version="2.3.6" GeneratePathProperty="true" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(PkgLib_Harmony)\lib\net472\0Harmony.dll" LogicalName="vatSys.RDF.0Harmony.dll" Visible="false" />
+  </ItemGroup>
+
+</Project>
