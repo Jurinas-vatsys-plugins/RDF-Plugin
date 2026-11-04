@@ -109,7 +109,22 @@ namespace vatSys.RDF
             ToggleRow(offscreenLabel, "CALLSIGN AT DISPLAY EDGE");
 
             Heading("LAST TRANSMISSION");
-            Row("HOLD TO RECALL", holdKey);
+            var holdKeyDefault = Button("DEFAULT");
+            var holdKeyClear = Button("CLEAR");
+            holdKeyDefault.Click += (s, e) => holdKey.Key = new RdfSettings().HoldKey;
+            holdKeyClear.Click += (s, e) => holdKey.Key = Keys.None;
+            var holdKeyRow = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                BackColor = BackColor
+            };
+            holdKey.Margin = new Padding(0, 0, 3, 0);
+            holdKeyDefault.Margin = new Padding(0, 0, 3, 0);
+            holdKeyClear.Margin = new Padding(0);
+            holdKeyRow.Controls.AddRange(new Control[] { holdKey, holdKeyDefault, holdKeyClear });
+            Row("HOLD TO RECALL", holdKeyRow);
             Row("KEEP HIGHLIGHT (S)", persist);
             ToggleRow(showLastTx, "LAST TX TILE IN VSCS");
 
