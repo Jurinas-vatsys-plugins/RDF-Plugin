@@ -1,0 +1,89 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VATSYS_URL: https://vatsys.sawbe.com/downloads/vatSysSetup.zip
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      # vatSys.exe is only referenced, never shipped. It comes from the official
+      # installer, cached until sawbe.com publishes a new one.
+      - name: Check vatSys installer
+        id: vatsys
+        run: |
+          $r = Invoke-WebRequest -Method Head -Uri $env:VATSYS_URL
+          $stamp = ([DateTime]"$($r.Headers['Last-Modified'])").ToString('yyyyMMddHHmmss')
+          "stamp=$stamp" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ runner.temp }}/vatsys
+          key: vatsys-${{ steps.vatsys.outputs.stamp }}
+
+      - name: Download vatSys
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'vatSysSetup.zip'
+          $setup = Join-Path $env:RUNNER_TEMP 'vatsys-setup'
+          Invoke-WebRequest -Uri $env:VATSYS_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $setup -Force
+          $msi = Get-ChildItem $setup -Filter *.msi -Recurse | Select-Object -First 1
+          $p = Start-Process msiexec -Wait -PassThru -ArgumentList '/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$env:RUNNER_TEMP\vatsys`""
+          if ($p.ExitCode -ne 0) { throw "msiexec failed with $($p.ExitCode)" }
+
+      - name: Locate vatSys
+        run: |
+          $exe = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'vatsys') -Filter vatSys.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'vatSys.exe not found in the installer' }
+          Write-Host "Using $($exe.FullName) $($exe.VersionInfo.FileVersion)"
+          "VATSYS_BIN=$($exe.DirectoryName)" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { ([xml](Get-Content RDFPlugin/RDFPlugin.csproj)).Project.PropertyGroup.Version | Select-Object -First 1 }
+          dotnet build RDFPlugin/RDFPlugin.csproj -c Release "-p:VatSysDir=$(Split-Path $env:VATSYS_BIN)" "-p:Version=$version"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Same layout as the hand-made releases: an RDF folder with the DLL, README and licences.
+          $staging = Join-Path $env:RUNNER_TEMP 'package'
+          New-Item -ItemType Directory -Force (Join-Path $staging 'RDF') | Out-Null
+          Copy-Item RDFPlugin/bin/Release/vatSys.RDFPlugin.dll, README.md, LICENSE, THIRD-PARTY-NOTICES.md (Join-Path $staging 'RDF')
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $zip = Join-Path (Resolve-Path dist) "RDF-Plugin-v$version.zip"
+          Compress-Archive -Path (Join-Path $staging 'RDF') -DestinationPath $zip -Force
+          "PACKAGE=$zip" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RDF-Plugin
+          path: dist/*.zip
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $env:PACKAGE --clobber
+          } else {
+            gh release create $tag $env:PACKAGE --title "RDF Plugin for vatSys $tag" --generate-notes
+          }
