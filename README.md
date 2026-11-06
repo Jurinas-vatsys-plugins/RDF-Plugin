@@ -1,6 +1,6 @@
 # RDF Plugin for vatSys
 
-Radio Direction Finder for vatSys. When a pilot transmits on a frequency you are receiving (RX), the plugin draws a circle around that aircraft on the ASD. If the aircraft is outside the displayed area, it draws a line from the display centre towards it and shows the callsign at the display edge. The VSCS (voice) window also gets a **LAST TX** tile showing the last station received and its frequency.
+Radio Direction Finder for vatSys. When a pilot transmits on a frequency you are receiving (RX), the plugin draws a circle around that aircraft on the ASD. If the aircraft is outside the displayed area, it draws a line from the display centre towards it and shows the callsign at the display edge. The VSCS (voice) window also gets a **LAST TX** line showing the last stations received and their frequencies.
 
 Ported from the EuroScope plugin [chembergj/RDF](https://github.com/chembergj/RDF). vatSys has its own AFV client, so the plugin reads `Audio.VSCSFrequencies[].ReceivingCallsigns` directly. No AFV Standalone Client or bridge is needed.
 
@@ -10,20 +10,28 @@ Ported from the EuroScope plugin [chembergj/RDF](https://github.com/chembergj/RD
 | --- | --- |
 | One pilot transmitting, aircraft on screen | Ring around the track (white by default, size adjustable) |
 | Aircraft outside the displayed area | Line from the display centre towards the aircraft, arrow head, callsign at the edge |
-| Simultaneous transmissions | All transmitting aircraft use the "simultaneous" colour (red by default) |
-| After the transmission ended | Hold the recall key (middle mouse button by default) to show the last transmitting aircraft again |
-| VSCS window | LAST TX tile: last received callsign + frequency (`000.000`); lit in the receiving colour while that station is still talking |
+| Simultaneous transmissions | All transmitting aircraft get a ring in the "simultaneous" colour (red by default); off-screen callsigns are stacked along the edge instead of overlapping |
+| After the transmission ended | Optional: hold a recall key (off by default) to show the last transmitting aircraft again |
+| VSCS window | LAST TX line at the bottom: last received callsign(s) + frequency (`000.000`), all simultaneous speakers in one line; a station still talking is backed with the receiving colour |
 
 - Works on every ASD window and on the ASMGCS (ground) display
 - Optional: recolour the track and label of transmitting aircraft (`SelectASDTrackColour`)
 - Optional: keep the last transmission highlighted for N seconds
 - Optional label item `RDF`: add an item with `Type="RDF"` to the profile's `Labels.xml` to show a bordered `RX` while the aircraft is transmitting
 
-### LAST TX tile
+### LAST TX line
 
-The tile follows the AFV standalone client's "Last Received" / "Last Freq" logic. When a station starts transmitting on an RX frequency, it becomes the last station and the frequency it was heard on is recorded. The value stays until another station transmits. If several stations start at the same time, the tile shows the first callsign and `+N`.
+```
+LAST TX  QFA1 124.400  VOZ2 128.000  JST3 124.400
+```
 
-The tile takes the next free slot after the last frequency button. If that column is full, it opens a new column and the Setup/Coord/Text/Group buttons and pages move one column to the right. It can be turned off with **Settings → RDF → Show LAST TX in VSCS**.
+A single line of text at the bottom of the VSCS window, next to the page scroll bar. The frequency buttons and pages are not changed, so it stays tidy however many frequencies are set up.
+
+It follows the AFV standalone client's "Last Received" / "Last Freq" logic. When a station starts transmitting on an RX frequency, it becomes the last station and the frequency it was heard on is recorded. The value stays until another station transmits.
+
+Stations that start while another station is still talking (simultaneous transmissions) are added to the same entry, in the order they started, each with the frequency it was heard on. A station that starts after silence begins a new entry. A station that is still talking is backed with the VSCS receiving colour, like its frequency button.
+
+When the page scroll bar is shown there is less room: the title shortens to `TX`, the first speaker is always shown and the others are counted as `+N`. The line can be turned off with **Settings → RDF → Show LAST TX in VSCS**.
 
 ## Installation
 
@@ -43,15 +51,15 @@ Restart vatSys. `RDF` appears in the plugin list in the *About* window.
 Main menu **Settings → RDF**:
 
 - **Enabled**: turn the ASD highlighting on or off
-- **Show LAST TX in VSCS**: show or hide the VSCS tile (also in the settings window, saved as `ShowLastTx`)
+- **Show LAST TX in VSCS**: show or hide the LAST TX line (also in the settings window, saved as `ShowLastTx`)
 - **Ring size (N px)**: pick the ring radius from presets (20-100 px); the current value is ticked
-- **Settings...**: colours, ring size (any value 5-500 px), line width, off-screen indicator (line from centre / edge pointer / none), recall key, persistence, track recolouring, LAST TX tile
+- **Settings...**: colours, ring size (any value 5-500 px), line width, off-screen indicator (line from centre / edge pointer / none), recall key (with CLEAR) and recall hold delay, persistence, track recolouring, LAST TX line
 
 The settings window is a native vatSys window (vatSys `BaseForm` and controls, profile colours).
 
 ### Test mode (hidden)
 
-**Test on selected track** simulates the selected aircraft transmitting for 5 seconds, so the ring, off-screen line and LAST TX tile can be checked without a network connection. The LAST TX tile then shows `---.---` as the frequency.
+**Test on selected track** simulates the selected aircraft transmitting for 5 seconds, so the ring, off-screen line and LAST TX line can be checked without a network connection. The LAST TX line then shows `---.---` as the frequency.
 
 The menu item is hidden by default. To show it, create `RDFPlugin.json` next to the DLL (or in `Documents\vatSys Files`) and restart vatSys:
 
@@ -72,7 +80,8 @@ Settings are stored in `RDFPlugin.xml` next to the DLL. If that folder is not wr
   <LineWidth>2</LineWidth>
   <Offscreen>LineFromCentre</Offscreen>   <!-- None | LineFromCentre | EdgePointer -->
   <OffscreenLabel>true</OffscreenLabel>
-  <HoldKey>MButton</HoldKey>              <!-- System.Windows.Forms.Keys name, None to disable -->
+  <HoldKey>None</HoldKey>                 <!-- System.Windows.Forms.Keys name, e.g. MButton; None = recall off -->
+  <RecallDelayMs>400</RecallDelayMs>      <!-- hold time before the recall shows, 0-5000 ms -->
   <PersistSeconds>0</PersistSeconds>
   <HighlightTrack>false</HighlightTrack>
   <TrackColour>#FFFFFF</TrackColour>
@@ -80,14 +89,13 @@ Settings are stored in `RDFPlugin.xml` next to the DLL. If that folder is not wr
 </RDF>
 ```
 
-> If you use the Drag and Zoom plugin with middle-button panning, panning also triggers the recall. Change the recall key in the RDF settings if that bothers you.
+> The recall (show the last transmitting aircraft again, like the middle mouse button in the EuroScope RDF plugin) is off by default. To use it, click **HOLD TO RECALL** in the settings and press a key or mouse button; **CLEAR** turns it off again. The key has to be held for the **recall hold delay** (400 ms by default), so short presses, such as normal middle-clicks on vatSys tracks and label items, do not bring back old rings. If you pick the middle button and also pan with it in the Drag and Zoom plugin, a long pan still triggers the recall.
 
 ## How it works
 
-- The vatSys plugin SDK only offers label items, track colours and menu items; there is no API for drawing on the ASD or the VSCS. The plugin uses [Harmony](https://github.com/pardeike/Harmony) postfixes:
-  - `ASDControlDX.PaintTracksLabels`: draws the RDF graphics inside vatSys' own Direct2D frame, so nothing flickers and other windows cover it normally.
-  - `VSCSControlDX.PaintFreqButtons`: draws the LAST TX tile with vatSys' own button styling and shifts the following columns when needed.
-- If a future vatSys version changes these internals, the plugin reports an error. The ASD highlight then falls back to track recolouring; the LAST TX tile is skipped.
+- The vatSys plugin SDK only offers label items, track colours and menu items; there is no API for drawing on the ASD. The plugin uses a [Harmony](https://github.com/pardeike/Harmony) postfix on `ASDControlDX.PaintTracksLabels` to draw the RDF graphics inside vatSys' own Direct2D frame, so nothing flickers and other windows cover it normally.
+- If a future vatSys version changes these internals, the plugin reports an error and the ASD highlight falls back to track recolouring.
+- The LAST TX line is an ordinary WinForms control the plugin adds to each VSCS window (vatSys font and colours); no patching is involved.
 - Receiving callsigns are read from the VSCS frequencies every 50 ms. Only RX-enabled frequencies count.
 
 ## Building

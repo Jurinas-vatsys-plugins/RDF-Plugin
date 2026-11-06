@@ -28,13 +28,15 @@ namespace vatSys.RDF
         public OffscreenMode Offscreen = OffscreenMode.LineFromCentre;
         public bool OffscreenLabel = true;
         /// <summary>Key/mouse button that, while held, shows the last transmitting aircraft.</summary>
-        public Keys HoldKey = Keys.MButton;
+        public Keys HoldKey = Keys.None;
+        /// <summary>How long (ms) the recall key must be held before the last transmission is shown.</summary>
+        public int RecallDelayMs = 400;
         /// <summary>Seconds the last transmission stays highlighted after it ends (0 = only while transmitting).</summary>
         public double PersistSeconds = 0;
         /// <summary>Also recolour the track symbol and label of transmitting aircraft.</summary>
         public bool HighlightTrack = false;
         public Color TrackColour = Color.White;
-        /// <summary>Show the LAST TX tile (last received callsign and frequency) in the VSCS window.</summary>
+        /// <summary>Show the LAST TX line (last received callsigns and frequencies) at the bottom of the VSCS window.</summary>
         public bool ShowLastTx = true;
 
         public string LoadedFrom { get; private set; }
@@ -112,6 +114,7 @@ namespace vatSys.RDF
             new XElement(nameof(Offscreen), Offscreen),
             new XElement(nameof(OffscreenLabel), OffscreenLabel),
             new XElement(nameof(HoldKey), HoldKey),
+            new XElement(nameof(RecallDelayMs), RecallDelayMs),
             new XElement(nameof(PersistSeconds), PersistSeconds.ToString(CultureInfo.InvariantCulture)),
             new XElement(nameof(HighlightTrack), HighlightTrack),
             new XElement(nameof(TrackColour), ToHex(TrackColour)),
@@ -131,6 +134,7 @@ namespace vatSys.RDF
             if (Enum.TryParse(V(nameof(Offscreen)), true, out OffscreenMode o)) Offscreen = o;
             if (bool.TryParse(V(nameof(OffscreenLabel)), out b)) OffscreenLabel = b;
             if (Enum.TryParse(V(nameof(HoldKey)), true, out Keys k)) HoldKey = k;
+            if (int.TryParse(V(nameof(RecallDelayMs)), NumberStyles.Integer, CultureInfo.InvariantCulture, out var d) && d >= 0) RecallDelayMs = Math.Min(d, 5000);
             if (double.TryParse(V(nameof(PersistSeconds)), NumberStyles.Float, CultureInfo.InvariantCulture, out var p) && p >= 0) PersistSeconds = p;
             if (bool.TryParse(V(nameof(HighlightTrack)), out b)) HighlightTrack = b;
             TrackColour = ParseColour(V(nameof(TrackColour)), TrackColour);

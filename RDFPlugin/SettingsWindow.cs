@@ -29,6 +29,7 @@ namespace vatSys.RDF
         private readonly VsToggle offscreenLabel = new VsToggle();
         private readonly KeyCaptureButton holdKey = new KeyCaptureButton();
         private readonly TextField persist = NumberField();
+        private readonly TextField recallDelay = NumberField();
         private readonly VsToggle highlightTrack = new VsToggle();
         private readonly GenericButton trackColour = ColourButton();
         private readonly VsToggle showLastTx = new VsToggle();
@@ -109,9 +110,8 @@ namespace vatSys.RDF
             ToggleRow(offscreenLabel, "CALLSIGN AT DISPLAY EDGE");
 
             Heading("LAST TRANSMISSION");
-            var holdKeyDefault = Button("DEFAULT");
+            // Recall is off by default (no key); CLEAR returns to that.
             var holdKeyClear = Button("CLEAR");
-            holdKeyDefault.Click += (s, e) => holdKey.Key = new RdfSettings().HoldKey;
             holdKeyClear.Click += (s, e) => holdKey.Key = Keys.None;
             var holdKeyRow = new FlowLayoutPanel
             {
@@ -121,12 +121,12 @@ namespace vatSys.RDF
                 BackColor = BackColor
             };
             holdKey.Margin = new Padding(0, 0, 3, 0);
-            holdKeyDefault.Margin = new Padding(0, 0, 3, 0);
             holdKeyClear.Margin = new Padding(0);
-            holdKeyRow.Controls.AddRange(new Control[] { holdKey, holdKeyDefault, holdKeyClear });
+            holdKeyRow.Controls.AddRange(new Control[] { holdKey, holdKeyClear });
             Row("HOLD TO RECALL", holdKeyRow);
+            Row("RECALL HOLD DELAY (MS)", recallDelay);
             Row("KEEP HIGHLIGHT (S)", persist);
-            ToggleRow(showLastTx, "LAST TX TILE IN VSCS");
+            ToggleRow(showLastTx, "LAST TX LINE IN VSCS");
 
             Heading("TRACK");
             ToggleRow(highlightTrack, "RECOLOUR TRACK AND LABEL");
@@ -222,6 +222,7 @@ namespace vatSys.RDF
             offscreen.SelectedIndex = (int)settings.Offscreen;
             offscreenLabel.Checked = settings.OffscreenLabel;
             holdKey.Key = settings.HoldKey;
+            recallDelay.Text = settings.RecallDelayMs.ToString(CultureInfo.InvariantCulture);
             persist.Text = settings.PersistSeconds.ToString("0.#", CultureInfo.InvariantCulture);
             highlightTrack.Checked = settings.HighlightTrack;
             showLastTx.Checked = settings.ShowLastTx;
@@ -240,6 +241,7 @@ namespace vatSys.RDF
                 s.Offscreen = (OffscreenMode)offscreen.SelectedIndex;
             s.OffscreenLabel = offscreenLabel.Checked;
             s.HoldKey = holdKey.Key;
+            s.RecallDelayMs = (int)Math.Round(ReadNumber(recallDelay, s.RecallDelayMs, 0, 5000));
             s.PersistSeconds = ReadNumber(persist, s.PersistSeconds, 0, 60);
             s.HighlightTrack = highlightTrack.Checked;
             s.ShowLastTx = showLastTx.Checked;

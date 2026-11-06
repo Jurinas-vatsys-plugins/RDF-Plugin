@@ -31,22 +31,40 @@ namespace vatSys.RDF
         public bool Live { get; }
     }
 
-    /// <summary>The most recent transmission that started on a received frequency (AFV "Last Received").</summary>
-    internal sealed class LastTransmission
+    /// <summary>One station heard in a transmission.</summary>
+    internal sealed class Speaker
     {
-        public LastTransmission(IReadOnlyList<string> callsigns, uint frequency, DateTime startedUtc)
+        public Speaker(string callsign, uint frequency)
         {
-            Callsigns = callsigns;
+            Callsign = callsign;
             Frequency = frequency;
-            StartedUtc = startedUtc;
         }
 
-        public IReadOnlyList<string> Callsigns { get; }
+        public string Callsign { get; }
 
         /// <summary>Frequency in Hz, 0 when unknown (test mode).</summary>
         public uint Frequency { get; }
+    }
+
+    /// <summary>
+    /// The most recent transmission on a received frequency (AFV "Last Received"). Stations that start
+    /// while another station is still talking (simultaneous transmissions) are added to the same
+    /// transmission, in the order they started; a start after silence begins a new transmission.
+    /// </summary>
+    internal sealed class LastTransmission
+    {
+        public LastTransmission(IReadOnlyList<Speaker> speakers, DateTime startedUtc)
+        {
+            Speakers = speakers;
+            StartedUtc = startedUtc;
+        }
+
+        public IReadOnlyList<Speaker> Speakers { get; }
 
         public DateTime StartedUtc { get; }
+
+        public LastTransmission With(IEnumerable<Speaker> added) =>
+            new LastTransmission(Speakers.Concat(added).ToArray(), StartedUtc);
     }
 
     /// <summary>
@@ -65,6 +83,7 @@ namespace vatSys.RDF
         private HashSet<string> lastActive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> previous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private DateTime previousEndedUtc = DateTime.MinValue;
+        private readonly HoldTimer recallHold = new HoldTimer();
 
         private string testCallsign;
         private DateTime testUntilUtc;
@@ -118,14 +137,16 @@ namespace vatSys.RDF
 
                 var active = new HashSet<string>(receiving.Keys, StringComparer.OrdinalIgnoreCase);
 
-                // Same rule as the AFV client: a station that starts transmitting becomes the last received station.
-                bool lastChanged = false;
-                var started = receiving.Where(kv => !lastActive.Contains(kv.Key)).ToList();
-                if (started.Count > 0)
-                {
-                    lastTransmission = new LastTransmission(started.Select(kv => kv.Key).ToArray(), started[0].Value, now);
-                    lastChanged = true;
-                }
+                // Track the recall key on every poll so a click during a transmission cannot leave a stale start time.
+                // The key must be held for RecallDelayMs: vatSys uses middle-click and other keys for normal actions,
+                // and a short press must not bring back old RDF rings.
+                bool recallHeld = recallHold.Update(IsHoldKeyDown(settings.HoldKey), now, TimeSpan.FromMilliseconds(settings.RecallDelayMs));
+
+                // Like the AFV client, a station that starts transmitting becomes the last received station.
+                // If others are still talking, it joins their transmission so simultaneous speakers are all kept.
+                var updatedLast = UpdateLastTransmission(lastTransmission, lastActive, receiving, now);
+                bool lastChanged = !ReferenceEquals(updatedLast, lastTransmission);
+                lastTransmission = updatedLast;
 
                 RdfSnapshot next;
                 if (active.Count > 0)
@@ -140,7 +161,7 @@ namespace vatSys.RDF
                         previousEndedUtc = now;
 
                     bool show = previous.Count > 0 &&
-                        (IsHoldKeyDown(settings.HoldKey) ||
+                        (recallHeld ||
                          (settings.PersistSeconds > 0 && (now - previousEndedUtc).TotalSeconds < settings.PersistSeconds));
 
                     next = show ? new RdfSnapshot(previous, previous.Count > 1, live: false) : RdfSnapshot.Empty;
@@ -162,6 +183,24 @@ namespace vatSys.RDF
             {
                 Monitor.Exit(sync);
             }
+        }
+
+        /// <summary>
+        /// Like the AFV client, a station that starts transmitting becomes the last received station. If others
+        /// were still talking it joins their transmission, so simultaneous speakers are all kept (in start order).
+        /// Returns the same instance when nothing started.
+        /// </summary>
+        internal static LastTransmission UpdateLastTransmission(LastTransmission last, ICollection<string> previouslyActive,
+            IEnumerable<KeyValuePair<string, uint>> receiving, DateTime nowUtc)
+        {
+            var started = receiving.Where(kv => !previouslyActive.Contains(kv.Key))
+                .Select(kv => new Speaker(kv.Key, kv.Value)).ToList();
+            if (started.Count == 0)
+                return last;
+            if (previouslyActive.Count == 0 || last == null)
+                return new LastTransmission(started, nowUtc);
+            var added = started.Where(sp => !last.Speakers.Any(x => string.Equals(x.Callsign, sp.Callsign, StringComparison.OrdinalIgnoreCase))).ToList();
+            return added.Count == 0 ? last : last.With(added);
         }
 
         /// <summary>Callsign -> frequency (Hz) of every station currently heard on an RX-enabled frequency.</summary>
@@ -212,5 +251,23 @@ namespace vatSys.RDF
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
+    }
+
+    /// <summary>Reports true once an input has been held down continuously for a minimum time.</summary>
+    internal sealed class HoldTimer
+    {
+        private DateTime? downSinceUtc;
+
+        public bool Update(bool isDown, DateTime nowUtc, TimeSpan delay)
+        {
+            if (!isDown)
+            {
+                downSinceUtc = null;
+                return false;
+            }
+            if (downSinceUtc == null)
+                downSinceUtc = nowUtc;
+            return nowUtc - downSinceUtc.Value >= delay;
+        }
     }
 }

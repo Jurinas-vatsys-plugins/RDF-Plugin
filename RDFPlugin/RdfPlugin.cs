@@ -27,6 +27,7 @@ namespace vatSys.RDF
 
         private ToolStripMenuItem enabledMenuItem;
         private ToolStripMenuItem lastTxMenuItem;
+        private LastTxLineManager lastTxLines;
         private ToolStripMenuItem ringSizeMenuItem;
 
         /// <summary>Quick ring (circle radius) presets in pixels; any other value can be typed in the settings window.</summary>
@@ -61,11 +62,11 @@ namespace vatSys.RDF
 
             try
             {
-                InstallVscsPatch();
+                lastTxLines = new LastTxLineManager(() => settings, state);
             }
             catch (Exception ex)
             {
-                Errors.Add(new Exception("RDF plugin could not add the LAST TX tile to the VSCS window (" + ex.Message + ").", ex), PluginName);
+                Errors.Add(new Exception("RDF plugin could not add the LAST TX line to the VSCS window (" + ex.Message + ").", ex), PluginName);
             }
 
             try
@@ -81,9 +82,6 @@ namespace vatSys.RDF
         // Kept separate so Harmony types are only touched after the embedded assembly resolver is registered.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void InstallRenderPatch() => AsdRenderPatch.Install(() => settings, () => state.Current);
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private void InstallVscsPatch() => VscsPatch.Install(() => settings, state);
 
         internal static string GetCallsign(Track track)
         {
@@ -205,7 +203,7 @@ namespace vatSys.RDF
             if (lastTxMenuItem != null)
                 lastTxMenuItem.Checked = updated.ShowLastTx;
             UpdateRingSizeMenu();
-            InvalidateVscs();
+            lastTxLines?.Refresh();
             try
             {
                 updated.Save();
@@ -213,18 +211,6 @@ namespace vatSys.RDF
             catch (Exception ex)
             {
                 Errors.Add(new Exception("RDF plugin could not save settings: " + ex.Message, ex), PluginName);
-            }
-        }
-
-        // Only touches VscsPatch (and therefore Harmony) when the patch was installed.
-        private static void InvalidateVscs()
-        {
-            try
-            {
-                VscsPatch.InvalidateAll();
-            }
-            catch (Exception)
-            {
             }
         }
 

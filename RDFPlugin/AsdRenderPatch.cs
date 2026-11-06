@@ -144,6 +144,7 @@ namespace vatSys.RDF
 
             var oldMode = dc.AntialiasMode;
             dc.AntialiasMode = AntialiasMode.PerPrimitive;
+            var placedLabels = new List<RectangleF>();
             try
             {
                 foreach (var kv in targets)
@@ -158,7 +159,7 @@ namespace vatSys.RDF
                     }
                     else if (settings.Offscreen != OffscreenMode.None)
                     {
-                        DrawOffscreen(dc, brush, fontRef(asd), p, halfW, halfH, kv.Key, settings);
+                        DrawOffscreen(dc, brush, fontRef(asd), p, halfW, halfH, kv.Key, settings, placedLabels);
                     }
                 }
             }
@@ -185,7 +186,7 @@ namespace vatSys.RDF
             return result;
         }
 
-        private static void DrawOffscreen(DeviceContext1 dc, SolidColorBrush brush, TextFormat font, Vector2 p, float halfW, float halfH, string callsign, RdfSettings settings)
+        private static void DrawOffscreen(DeviceContext1 dc, SolidColorBrush brush, TextFormat font, Vector2 p, float halfW, float halfH, string callsign, RdfSettings settings, List<RectangleF> placedLabels)
         {
             // Point where the centre->aircraft line meets the (inset) display edge.
             float ex = halfW - EdgeMargin, ey = halfH - EdgeMargin;
@@ -217,9 +218,49 @@ namespace vatSys.RDF
                 float y = anchor.Y - (dir.Y > 0.3f ? h : dir.Y < -0.3f ? 0f : h / 2f);
                 x = Math.Max(-halfW + 2f, Math.Min(halfW - w - 2f, x));
                 y = Math.Max(-halfH + 2f, Math.Min(halfH - h - 2f, y));
+
+                // Several aircraft in a similar direction: slide this label along the edge so it does not cover another.
+                bool onSideEdge = Math.Abs(edge.X) >= ex - 1f;
+                var placed = PlaceLabel(new RectangleF(x, y, w, h), placedLabels, onSideEdge,
+                    new RectangleF(-halfW + 2f, -halfH + 2f, halfW * 2f - 4f, halfH * 2f - 4f));
+                placedLabels.Add(placed);
+                x = placed.X;
+                y = placed.Y;
                 // vatSys' font format is vertically centred, so compensate for the layout's top offset.
                 dc.DrawTextLayout(new SharpDX.Mathematics.Interop.RawVector2(x - layout.Metrics.Left, y - layout.Metrics.Top), layout, brush);
             }
+        }
+
+        /// <summary>
+        /// Returns the position closest to <paramref name="wanted"/> that does not overlap an already placed label,
+        /// moving vertically (labels on the left/right edge) or horizontally (top/bottom edge) and staying in bounds.
+        /// </summary>
+        internal static RectangleF PlaceLabel(RectangleF wanted, IList<RectangleF> placed, bool moveVertically, RectangleF bounds)
+        {
+            float step = (moveVertically ? wanted.Height : wanted.Width) + 2f;
+            for (int i = 0; i <= 2 * (placed.Count + 1); i++)
+            {
+                // Offsets 0, +1, -1, +2, -2 ... steps.
+                int k = (i + 1) / 2 * (i % 2 == 1 ? 1 : -1);
+                var candidate = wanted;
+                if (moveVertically)
+                    candidate.Y = Math.Max(bounds.Top, Math.Min(bounds.Bottom - wanted.Height, wanted.Y + k * step));
+                else
+                    candidate.X = Math.Max(bounds.Left, Math.Min(bounds.Right - wanted.Width, wanted.X + k * step));
+
+                bool free = true;
+                foreach (var r in placed)
+                {
+                    if (r.Intersects(candidate))
+                    {
+                        free = false;
+                        break;
+                    }
+                }
+                if (free)
+                    return candidate;
+            }
+            return wanted;
         }
 
         private static SharpDX.Mathematics.Interop.RawVector2 ToRaw(Vector2 v) => new SharpDX.Mathematics.Interop.RawVector2(v.X, v.Y);
