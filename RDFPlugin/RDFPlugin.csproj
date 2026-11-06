@@ -7,7 +7,7 @@
     <RootNamespace>vatSys.RDF</RootNamespace>
     <LangVersion>latest</LangVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>RDF Plugin for vatSys</Product>
     <Description>Radio Direction Finder - highlights aircraft transmitting on received frequencies</Description>
     <Copyright>Based on the RDF Plugin for EuroScope by Claus Hemberg Joergensen</Copyright>
