@@ -45,24 +45,42 @@ namespace vatSys.RDF
 
         private void AttachToWindows()
         {
+            foreach (var form in FindVscsWindows())
+            {
+                if (form.IsDisposed || lines.Any(l => !l.IsDisposed && l.Parent == form))
+                    continue;
+                var line = new LastTxLine(form);
+                lines.Add(line);
+                line.Update(getSettings().ShowLastTx, state.Last, state.Current);
+            }
+        }
+
+        private static IEnumerable<Form> FindVscsWindows()
+        {
+            var found = new List<Form>();
+
+            // vatSys keeps its VSCS window in MMI.VSCSWindow. When a saved window position exists it is shown
+            // through Win32 SetWindowPlacement instead of Form.Show, so it never appears in Application.OpenForms.
+            if (VscsWindowField?.GetValue(null) is Form main)
+                found.Add(main);
+
             try
             {
                 foreach (Form form in Application.OpenForms)
                 {
-                    if (form.GetType().FullName != VscsWindowType || form.IsDisposed)
-                        continue;
-                    if (lines.Any(l => !l.IsDisposed && l.Parent == form))
-                        continue;
-                    var line = new LastTxLine(form);
-                    lines.Add(line);
-                    line.Update(getSettings().ShowLastTx, state.Last, state.Current);
+                    if (form.GetType().FullName == VscsWindowType && !found.Contains(form))
+                        found.Add(form);
                 }
             }
             catch (InvalidOperationException)
             {
                 // OpenForms changed while enumerating; try again on the next tick.
             }
+            return found;
         }
+
+        private static readonly System.Reflection.FieldInfo VscsWindowField =
+            typeof(MMI).GetField("VSCSWindow", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
     }
 
     /// <summary>One line of text added to a VSCS window.</summary>

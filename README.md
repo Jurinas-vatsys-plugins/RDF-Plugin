@@ -17,6 +17,7 @@ Ported from the EuroScope plugin [chembergj/RDF](https://github.com/chembergj/RD
 - Works on every ASD window and on the ASMGCS (ground) display
 - Optional: recolour the track and label of transmitting aircraft (`SelectASDTrackColour`)
 - Optional: keep the last transmission highlighted for N seconds
+- Audio Settings: a **VHF effects** toggle to turn off the simulated VHF radio sound on received voice
 - Optional label item `RDF`: add an item with `Type="RDF"` to the profile's `Labels.xml` to show a bordered `RX` while the aircraft is transmitting
 
 ### LAST TX line
@@ -57,6 +58,10 @@ Main menu **Settings → RDF**:
 
 The settings window is a native vatSys window (vatSys `BaseForm` and controls, profile colours).
 
+### VHF effects
+
+The plugin adds a toggle to the **Emulation** box of the vatSys **Audio Settings** window, in the empty space left of the VHF preset label (`VHFEmulation2`). Ticked (default) is normal vatSys behaviour. Unticked turns off the AFV client's radio simulation for received voice: the VHF band-pass filter, white noise and crackle. The AFV client has one switch for this, so the HF noise of **Realistic HF** is turned off too. The setting is saved as `VhfEffects` and applied again whenever vatSys restarts its audio.
+
 ### Test mode (hidden)
 
 **Test on selected track** simulates the selected aircraft transmitting for 5 seconds, so the ring, off-screen line and LAST TX line can be checked without a network connection. The LAST TX line then shows `---.---` as the frequency.
@@ -95,7 +100,8 @@ Settings are stored in `RDFPlugin.xml` next to the DLL. If that folder is not wr
 
 - The vatSys plugin SDK only offers label items, track colours and menu items; there is no API for drawing on the ASD. The plugin uses a [Harmony](https://github.com/pardeike/Harmony) postfix on `ASDControlDX.PaintTracksLabels` to draw the RDF graphics inside vatSys' own Direct2D frame, so nothing flickers and other windows cover it normally.
 - If a future vatSys version changes these internals, the plugin reports an error and the ASD highlight falls back to track recolouring.
-- The LAST TX line is an ordinary WinForms control the plugin adds to each VSCS window (vatSys font and colours); no patching is involved.
+- The LAST TX line is an ordinary WinForms control the plugin adds to each VSCS window (vatSys font and colours); no patching is involved. The window is found through `MMI.VSCSWindow`, because vatSys shows it with `SetWindowPlacement` when a saved position exists and it then never appears in `Application.OpenForms`.
+- The VHF effects toggle uses a Harmony postfix on the `AudioSettingsWindow` constructor (to add the control) and on `AFV.StartClient` (to set the AFV client's `BypassEffects` on every new soundcard).
 - Receiving callsigns are read from the VSCS frequencies every 50 ms. Only RX-enabled frequencies count.
 
 ## Building
