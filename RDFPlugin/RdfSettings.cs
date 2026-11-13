@@ -38,6 +38,8 @@ namespace vatSys.RDF
         public Color TrackColour = Color.White;
         /// <summary>Show the LAST TX line (last received callsigns and frequencies) at the bottom of the VSCS window.</summary>
         public bool ShowLastTx = true;
+        /// <summary>Simulated VHF radio sound (filter, noise, crackle) on received AFV voice. Set from the vatSys Audio Settings window.</summary>
+        public bool VhfEffects = true;
 
         public string LoadedFrom { get; private set; }
 
@@ -118,7 +120,8 @@ namespace vatSys.RDF
             new XElement(nameof(PersistSeconds), PersistSeconds.ToString(CultureInfo.InvariantCulture)),
             new XElement(nameof(HighlightTrack), HighlightTrack),
             new XElement(nameof(TrackColour), ToHex(TrackColour)),
-            new XElement(nameof(ShowLastTx), ShowLastTx));
+            new XElement(nameof(ShowLastTx), ShowLastTx),
+            new XElement(nameof(VhfEffects), VhfEffects));
 
         private void Read(XElement root)
         {
@@ -139,6 +142,7 @@ namespace vatSys.RDF
             if (bool.TryParse(V(nameof(HighlightTrack)), out b)) HighlightTrack = b;
             TrackColour = ParseColour(V(nameof(TrackColour)), TrackColour);
             if (bool.TryParse(V(nameof(ShowLastTx)), out b)) ShowLastTx = b;
+            if (bool.TryParse(V(nameof(VhfEffects)), out b)) VhfEffects = b;
         }
 
         public static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";

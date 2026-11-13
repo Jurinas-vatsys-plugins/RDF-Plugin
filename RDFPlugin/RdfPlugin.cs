@@ -71,6 +71,15 @@ namespace vatSys.RDF
 
             try
             {
+                InstallVhfEffectsPatch();
+            }
+            catch (Exception ex)
+            {
+                Errors.Add(new Exception("RDF plugin could not add the VHF effects option to Audio Settings (" + ex.Message + ").", ex), PluginName);
+            }
+
+            try
+            {
                 AddMenuItems();
             }
             catch (Exception ex)
@@ -82,6 +91,17 @@ namespace vatSys.RDF
         // Kept separate so Harmony types are only touched after the embedded assembly resolver is registered.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void InstallRenderPatch() => AsdRenderPatch.Install(() => settings, () => state.Current);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void InstallVhfEffectsPatch() => VhfEffectsPatch.Install(() => settings.VhfEffects, SetVhfEffects);
+
+        private void SetVhfEffects(bool enabled)
+        {
+            var updated = settings.Clone();
+            updated.VhfEffects = enabled;
+            ApplySettings(updated);
+            VhfEffectsPatch.Apply();
+        }
 
         internal static string GetCallsign(Track track)
         {
@@ -186,7 +206,12 @@ namespace vatSys.RDF
                 settingsWindow.Activate();
                 return;
             }
-            settingsWindow = new SettingsWindow(settings.Clone(), drawingAvailable, ApplySettings);
+            // VhfEffects is changed in the vatSys Audio Settings window, not here; keep its current value.
+            settingsWindow = new SettingsWindow(settings.Clone(), drawingAvailable, s =>
+            {
+                s.VhfEffects = settings.VhfEffects;
+                ApplySettings(s);
+            });
             // Owned by the vatSys main window so it stays on top of it, like other vatSys windows.
             var owner = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
             if (owner != null)
