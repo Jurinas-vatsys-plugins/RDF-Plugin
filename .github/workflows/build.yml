@@ -6,9 +6,20 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to increase for the release
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: write
+
+# Releases are numbered from the previous tag, so two of them must never run at once.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || 'release' }}
+  cancel-in-progress: false
 
 env:
   VATSYS_URL: https://vatsys.sawbe.com/downloads/vatSysSetup.zip
@@ -21,6 +32,41 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags are needed to work out the next version
+
+      # Every push to main (a merged PR) is released. By default the patch number of the latest v* tag goes
+      # up by one (1.2.0 -> 1.2.1). For a bigger step, raise <Version> in RDFPlugin.csproj (a higher csproj
+      # version wins), run the workflow by hand with minor/major, or push a v* tag yourself.
+      # Put [skip release] in the commit message to build main without releasing.
+      - name: Work out version
+        env:
+          BUMP: ${{ inputs.bump }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $csproj = [version](([xml](Get-Content RDFPlugin/RDFPlugin.csproj)).Project.PropertyGroup.Version | Select-Object -First 1)
+          $release = $false
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = [version]$env:GITHUB_REF_NAME.TrimStart('v')
+            $release = $true
+          } elseif (($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main' -and $env:COMMIT_MESSAGE -notmatch '\[skip release\]') -or
+                    ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:GITHUB_REF -eq 'refs/heads/main')) {
+            $latest = git tag -l 'v*' | ForEach-Object { $_.TrimStart('v') -as [version] } | Where-Object { $_ } | Sort-Object -Descending | Select-Object -First 1
+            if (-not $latest) { $latest = [version]'0.0.0' }
+            $bump = if ($env:BUMP) { $env:BUMP } else { 'patch' }
+            $next = switch ($bump) {
+              'major' { [version]::new($latest.Major + 1, 0, 0) }
+              'minor' { [version]::new($latest.Major, $latest.Minor + 1, 0) }
+              default { [version]::new($latest.Major, $latest.Minor, [Math]::Max($latest.Build, 0) + 1) }
+            }
+            $version = if ($csproj -gt $next) { $csproj } else { $next }
+            $release = $true
+            Write-Host "Latest tag v$latest, $bump bump -> v$version"
+          } else {
+            $version = $csproj
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE=$($release.ToString().ToLower())" >> $env:GITHUB_ENV
 
       # vatSys.exe is only referenced, never shipped. It comes from the official
       # installer, cached until sawbe.com publishes a new one.
@@ -57,7 +103,7 @@ jobs:
 
       - name: Build
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { ([xml](Get-Content RDFPlugin/RDFPlugin.csproj)).Project.PropertyGroup.Version | Select-Object -First 1 }
+          $version = $env:VERSION
           dotnet build RDFPlugin/RDFPlugin.csproj -c Release "-p:VatSysDir=$(Split-Path $env:VATSYS_BIN)" "-p:Version=$version"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -76,14 +122,16 @@ jobs:
           path: dist/*.zip
 
       - name: Publish release
-        if: github.ref_type == 'tag'
+        if: env.RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = "v$env:VERSION"
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $env:PACKAGE --clobber
           } else {
-            gh release create $tag $env:PACKAGE --title "RDF Plugin for vatSys $tag" --generate-notes
+            # Creates the tag on this commit when it does not exist yet (the main-branch case).
+            gh release create $tag $env:PACKAGE --target $env:GITHUB_SHA --title "RDF Plugin for vatSys $tag" --generate-notes
           }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

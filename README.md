@@ -102,7 +102,7 @@ Settings are stored in `RDFPlugin.xml` next to the DLL. If that folder is not wr
 - If a future vatSys version changes these internals, the plugin reports an error and the ASD highlight falls back to track recolouring.
 - The LAST TX line is an ordinary WinForms control the plugin adds to each VSCS window (vatSys font and colours); no patching is involved. The window is found through `MMI.VSCSWindow`, because vatSys shows it with `SetWindowPlacement` when a saved position exists and it then never appears in `Application.OpenForms`.
 - The VHF effects toggle uses a Harmony postfix on the `AudioSettingsWindow` constructor (to add the control) and on `AFV.StartClient` (to set the AFV client's `BypassEffects` on every new soundcard).
-- Receiving callsigns are read from the VSCS frequencies every 50 ms. Only RX-enabled frequencies count.
+- Receiving callsigns are read every 50 ms. Only RX-enabled frequencies count. vatSys keeps one callsign list per frequency, but AFV reports per transceiver and routes each pilot to the transceiver that hears it best, so with two pilots on different transceivers of the same frequency vatSys' list keeps only one of them. The plugin therefore also reads the AFV client's receivers directly (per transceiver) and merges them per frequency.
 
 ## Building
 
@@ -113,6 +113,10 @@ dotnet build RDFPlugin/RDFPlugin.csproj -c Release
 ```
 
 Output: `RDFPlugin/bin/Release/vatSys.RDFPlugin.dll`. If vatSys is not installed in `G:\vatSys\vatSys`, add `-p:VatSysDir=<vatSys install directory>`.
+
+### Releases
+
+GitHub Actions builds every push and pull request. Every push to `main` (a merged PR) is also released: the patch number of the latest `v*` tag goes up by one (for example `v1.2.0` -> `v1.2.1`), and the workflow tags the commit and publishes `RDF-Plugin-vX.Y.Z.zip` with generated notes. To release a bigger step, raise `<Version>` in `RDFPlugin.csproj` (a higher csproj version wins), run the **Build** workflow by hand with `minor` or `major`, or push a `v*` tag. Put `[skip release]` in the commit message to merge without releasing.
 
 ## Credits
 

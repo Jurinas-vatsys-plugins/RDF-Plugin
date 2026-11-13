@@ -211,17 +211,36 @@ namespace vatSys.RDF
             if (frequencies == null)
                 return set;
 
+            void Add(string cs, uint frequency)
+            {
+                if (!string.IsNullOrWhiteSpace(cs) && !set.ContainsKey(cs.Trim()))
+                    set.Add(cs.Trim(), frequency);
+            }
+
+            // Per-transceiver state from the AFV client: vatSys' per-frequency list can lose one of two
+            // simultaneous speakers (see AfvReceivers). vatSys' list is still used as well, as a fallback.
+            var live = AfvReceivers.Read();
+
             foreach (var f in frequencies.ToArray())
             {
                 if (f == null || !f.Receive)
                     continue;
                 var callsigns = f.ReceivingCallsigns;
-                if (callsigns == null)
-                    continue;
-                foreach (var cs in callsigns.ToArray())
+                if (callsigns != null)
                 {
-                    if (!string.IsNullOrWhiteSpace(cs) && !set.ContainsKey(cs.Trim()))
-                        set.Add(cs.Trim(), f.Frequency);
+                    foreach (var cs in callsigns.ToArray())
+                        Add(cs, f.Frequency);
+                }
+                if (live != null && live.Count > 0 && AfvReceivers.Counts(f))
+                {
+                    foreach (var id in AfvReceivers.TransceiverIds(f))
+                    {
+                        if (live.TryGetValue(id, out var heard))
+                        {
+                            foreach (var cs in heard)
+                                Add(cs, f.Frequency);
+                        }
+                    }
                 }
             }
             return set;
